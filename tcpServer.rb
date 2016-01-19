@@ -1,99 +1,45 @@
 require 'socket'
 require 'thread'
 
+STUDENT_ID = "049fab2b9ed8146e9994a921f654febcdd3cd31c28b62db0020a0bbd889ff3f4"
+service_kill = false
+
 unless ARGV.length == 1
-  print "The correct number of arguments is 1!\n"
-  exit
+	print "The correct number of arguments is 1!\n"
+	exit
 end
 
 port = ARGV[0]
 puts "Servers started on port #{port}"
-
 server = TCPServer.new port
-activeQ = Queue.new
-lock = Mutex.new
-
-threadNum = 0
-killSwitch = false
+client_queue = Queue.new
 
 Thread.new do
-  loop do
-    Thread.start(server.accept) do |client|
-      activeQ.push(client)
-    end
-  end  
+	loop do
+		Thread.start(server.accept) do |client|
+			puts "client connected"
+			client_queue.push(client)
+		end
+	end
 end
 
-Thread.new do
-  loop do
-    if !activeQ.empty? and threadNum < 3
-      Thread.new do
-        threadNum+=1
-        client = activeQ.pop()
-        client.puts("#{Time.now}")
-        puts "#{threadNum}"
-        puts "Client active"
-        clientRunning = true
-        while clientRunning
-          input = client.gets
-          puts input
-          if input.start_with?("HELO")
-            puts input
-            helo, text = input.split(" ",2)
-            puts "#{text}"
-            client.puts "HELO #{text}"
-          elsif input == "KILl_SERVICE\n"
-            client.puts "KILL"
-            killSwitch = true
-            clientRunning = false       
-          end
-        end
-        if killSwitch == true
-          exit
-        end
-        threadNum -=1
-        client.close
-      end
-    else
-      sleep(1)  
-    end  
-  end 
+workers = (0...2).map do
+	Thread.new do
+		begin
+			while client = client_queue.pop()
+				input = client.gets
+				if (/HELO \w/).match(input) != nil
+					client.puts "#{input}\nIP:#{client.addr[2]}\nPort:#{port}\nStudentID:#{STUDENT_ID}\n"
+				elsif input == "KILL SERVICE\n"
+					service_kill = true
+				else
+					client.puts "else: " + input
+				end
+				client.close
+			end
+		end
+	end
 end
 
-while true
-
+while !service_kill
 end
-
-
-
-
-
-=begin
-  
-workers = (0...2).map do  
-  Thread.start(server.accept) do |client|
-    print client.gets
-    input = client.gets
-    client.puts "Hello !"
-    client.puts "Time is #{Time.now}"
-    clientRunning = true;
-    while clientRunning
-      if input.start_with?("HELO")
-        client.puts "Hello"
-      elsif input == "KIL"
-        client.puts "KILL"
-        clientRunning = false
-      else
-        puts input    
-      end
-    end
-  end
-end
-workers.map(&:join)
-
-=end
-
-
-
-
-
